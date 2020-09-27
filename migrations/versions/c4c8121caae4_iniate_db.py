@@ -1,8 +1,8 @@
-"""empty message
+"""iniate DB
 
-Revision ID: 1ef1df7469de
+Revision ID: c4c8121caae4
 Revises: 
-Create Date: 2020-09-18 13:55:45.491483
+Create Date: 2020-09-27 15:07:01.539703
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '1ef1df7469de'
+revision = 'c4c8121caae4'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -48,6 +48,13 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
+    op.create_table('user',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(length=50), nullable=False),
+    sa.Column('password', sa.Text(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('username')
+    )
     op.create_table('student',
     sa.Column('is_active', sa.Boolean(), server_default='true', nullable=True),
     sa.Column('id', sa.Integer(), nullable=False),
@@ -58,6 +65,7 @@ def upgrade():
     sa.Column('mobile', sa.Text(), nullable=False),
     sa.Column('has_exam', sa.Boolean(), nullable=False),
     sa.Column('exams_num', sa.Integer(), nullable=False),
+    sa.Column('teachers_num', sa.Integer(), nullable=False),
     sa.Column('roles', sa.Text(), nullable=False),
     sa.Column('school_year_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['school_year_id'], ['schoolyear.id'], ),
@@ -84,9 +92,12 @@ def upgrade():
     sa.Column('title', sa.String(length=50), nullable=True),
     sa.Column('total_time', sa.Integer(), nullable=True),
     sa.Column('start_date', sa.DateTime(), nullable=True),
+    sa.Column('end_date', sa.DateTime(), nullable=True),
     sa.Column('teacher_id', sa.Integer(), nullable=True),
     sa.Column('school_year_id', sa.Integer(), nullable=True),
+    sa.Column('subject_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['school_year_id'], ['schoolyear.id'], ),
+    sa.ForeignKeyConstraint(['subject_id'], ['subject.id'], ),
     sa.ForeignKeyConstraint(['teacher_id'], ['teacher.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -94,6 +105,8 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(length=40), nullable=True),
     sa.Column('teacher_id', sa.Integer(), nullable=True),
+    sa.Column('school_year_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['school_year_id'], ['schoolyear.id'], ),
     sa.ForeignKeyConstraint(['teacher_id'], ['teacher.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -109,6 +122,13 @@ def upgrade():
     )
     op.create_table('exam_room',
     sa.Column('exam_id', sa.Integer(), nullable=False),
+    sa.Column('student_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['exam_id'], ['exam.id'], ),
+    sa.ForeignKeyConstraint(['student_id'], ['student.id'], ),
+    sa.PrimaryKeyConstraint('exam_id', 'student_id')
+    )
+    op.create_table('group_exam',
+    sa.Column('exam_id', sa.Integer(), nullable=False),
     sa.Column('group_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['exam_id'], ['exam.id'], ),
     sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
@@ -117,24 +137,37 @@ def upgrade():
     op.create_table('question',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('question_head', sa.Text(), nullable=True),
+    sa.Column('image_url', sa.Text(), nullable=True),
     sa.Column('correct_answer', sa.Text(), nullable=True),
+    sa.Column('correct_answer_image_url', sa.Text(), nullable=True),
     sa.Column('answer1', sa.Text(), nullable=True),
+    sa.Column('answer1_image_url', sa.Text(), nullable=True),
     sa.Column('answer2', sa.Text(), nullable=True),
+    sa.Column('answer2_image_url', sa.Text(), nullable=True),
     sa.Column('answer3', sa.Text(), nullable=True),
+    sa.Column('answer3_image_url', sa.Text(), nullable=True),
     sa.Column('grade', sa.Float(), nullable=True),
+    sa.Column('subject_id', sa.Integer(), nullable=True),
+    sa.Column('school_year_id', sa.Integer(), nullable=True),
     sa.Column('teacher_id', sa.Integer(), nullable=True),
     sa.Column('exam_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['exam_id'], ['exam.id'], ),
+    sa.ForeignKeyConstraint(['school_year_id'], ['schoolyear.id'], ),
+    sa.ForeignKeyConstraint(['subject_id'], ['subject.id'], ),
     sa.ForeignKeyConstraint(['teacher_id'], ['teacher.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('result',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('exam_id', sa.Integer(), nullable=True),
+    sa.Column('title', sa.String(length=50), nullable=True),
+    sa.Column('start_date', sa.DateTime(), nullable=True),
     sa.Column('student_id', sa.Integer(), nullable=True),
+    sa.Column('teacher_id', sa.Integer(), nullable=True),
     sa.Column('total_grade', sa.Float(), nullable=True),
     sa.ForeignKeyConstraint(['exam_id'], ['exam.id'], ),
     sa.ForeignKeyConstraint(['student_id'], ['student.id'], ),
+    sa.ForeignKeyConstraint(['teacher_id'], ['teacher.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###
@@ -144,12 +177,14 @@ def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
     op.drop_table('result')
     op.drop_table('question')
+    op.drop_table('group_exam')
     op.drop_table('exam_room')
     op.drop_table('center')
     op.drop_table('group')
     op.drop_table('exam')
     op.drop_table('teacher')
     op.drop_table('student')
+    op.drop_table('user')
     op.drop_table('subject')
     op.drop_table('schoolyear')
     op.drop_table('operator')
