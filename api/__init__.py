@@ -20,7 +20,7 @@ def create_app():
       integrations=[FlaskIntegration()],
       send_default_pii=False
     )
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+    app.config['SECRET_KEY'] = 'asdfghjkl;fghjkl;'
     setup_db(app)
     setup_auth(app)
 

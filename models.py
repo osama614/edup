@@ -8,7 +8,9 @@ from flask import redirect, url_for, request
 
 
 
-database_path = os.environ.get('SQLALCHEMY_DATABASE_URI')
+database_name = "osos$default"
+database_path = "postgres://{}:{}@{}/{}".format('osos', 'robot9000','osos.mysql.pythonanywhere-services.com', database_name)
+
 
 db = SQLAlchemy()
 migrate = Migrate()
@@ -236,11 +238,13 @@ class Student(AuthMixin, db.Model):
     def format(self):
         return {
             "id": self.id,
+            "username": self.username,
             "fname": self.fname,
             "lname": self.lname,
             "mobile": self.mobile,
             "has_exam": self.has_exam,
-            "exams_num": self.exams_num
+            "exams_num": self.exams_num,
+            "teachers_num": self.teachers_num
         }    
 
 

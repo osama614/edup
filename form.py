@@ -1,9 +1,13 @@
 
 from wtforms import Form, fields, validators
-#from flask_wtf import Form
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import db, User
 
+# m = generate_password_hash('admoon@#$')
+# n = {"hash": m}
+m = 'pbkdf2:sha256:150000$nxBiLX9z$8c7809dfc53609195ce7c9ec816126ac90acd23c26d82950be979437ce54a606'
+n = check_password_hash(m,'admoon@#$')
+print(n)
 
 class LoginForm(Form):
 

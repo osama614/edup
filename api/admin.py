@@ -3,6 +3,7 @@ from .auth import guard1, CustomError
 from models import *
 from flask_praetorian import auth_required, roles_required, roles_accepted
 import json
+import random
 
 manager = Blueprint('manager', __name__)
 
@@ -19,8 +20,14 @@ def paginate_entities(request, selection):
 
     return current_entities
 
-
-@manager.route('/login')
+@manager.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,true')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+    
+@manager.route('/login', methods=["POST"])
 def login():
 
     req = request.get_json(force=True)
@@ -32,22 +39,36 @@ def login():
         'access_token': guard1.encode_jwt_token(user)
         }), 200
 
-
+@manager.route('/signup', methods=["POST"])
+def signup():
+    try:
+        data = request.get_json()
+        username = data['username']
+        password = data['password']
+        
+        new_admin = Operator(username = username, password= guard1.hash_password(password))
+    except (ValueError, KeyError, TypeError):
+      raise CustomError({
+           "message": "Bad Request",
+           "description": "Check the the posted data (key_names, values_types)"
+          }, 400)
+    else:
+        new_admin.insert()
+        return f"New admin {new_admin.username} has been created!"
+              
 @manager.route('dashboard/all_exams')
+@auth_required
+@roles_required('admin')
 def get_exams():
 
     exams = Exam.query.all()
-
     if len(exams) == 0:
-
         raise CustomError({
         "message":"Not Found",
         "description": "You should edit any exams"
     }, 404)
-
+        
     formatted_examas = paginate_entities(request, exams)
-
-    
     return jsonify({
         'exams': formatted_examas
     })
@@ -68,7 +89,10 @@ def get_exam_form():
         groups = Group.query.all()
         forrmatted_groups = [group.format2() for group in groups]
     except:
-        abort(404)
+         raise CustomError({
+           "message": "Not Found",
+           "description": "Oops! there are some missing data you should have any (subjects,school_years,teachers,groups) on DB"
+          }, 404)
     else:
         return jsonify({
         "subject": formatted_subjects,
@@ -124,7 +148,7 @@ def create_exam():
           }, 400)
 
     except:
-        abort(500)  
+        abort(404)  
 
     else:
         new_exam.insert()
@@ -136,43 +160,60 @@ def create_exam():
 
 @manager.route('dashboard/exams/<int:exam_id>', methods=["GET"])
 def get_edit_examForm(exam_id):
-    try:
-        exam = Exam.query.get(int(exam_id))
-        formatted_exam = exam.format2()
-        teacher = exam.exam_owner
-        subject = exam.subject
-        school_year = exam.study_year
+    
+    exam = Exam.query.get(int(exam_id))
 
-        groups = exam.groups
-        forrmatted_current_groups = [group.format() for group in groups]
+    if exam == None:
+        abort(404) 
 
-        subjects = Subject.query.all()
-        formatted_subjects = [subject.format() for subject in subjects]
+    formatted_exam = exam.format()
+    teacher = exam.exam_owner
+    subject = exam.subject
+    school_year = exam.study_year
 
-        school_years = SchoolYear.query.all()
-        formatted_school_years = [school_year.format() for school_year in school_years]
+    groups = exam.groups
+    forrmatted_current_groups = [group.format() for group in groups]
 
-        teachers = Teacher.query.all()
-        formatted_teachers = [teacher.format2() for teacher in teachers]
+    subjects = Subject.query.all()
+    school_years = SchoolYear.query.all()
+    teachers = Teacher.query.all()
+    groups = Group.query.all()
 
-        groups = Group.query.all()
-        forrmatted_groups = [group.format2() for group in groups]
-    except:
-        abort(404)
+    if len(subjects) == 0 or len(school_years) == 0 or len(teachers) == 0 or len(groups) == 0:
+        
+        raise CustomError({
+           "message": "Not Found",
+           "description": "Oops! there are some missing data you should have any (subjects,school_years,teachers,groups) on DB"
+          }, 404)
+ 
 
-    else:
-        return jsonify({
-            "current_exam_data": formatted_exam,
-            "current_teacher" : teacher.format2(),
-            "current_subject": subject.format(),
-            "current_school_year": school_year.format(),
-            "current_groups": forrmatted_current_groups,
-            "all_groups": forrmatted_groups,
-            "all_teachers": formatted_teachers,
-            "all_subjects": formatted_subjects,
-            "all_years": formatted_school_years
+    formatted_subjects = [subject.format() for subject in subjects]
+    formatted_school_years = [school_year.format() for school_year in school_years]
+    formatted_teachers = [teacher.format2() for teacher in teachers]
+    
+    forrmatted_groups = [group.format2() for group in groups]
 
-        }) 
+    return jsonify({
+        "current_exam_data": formatted_exam,
+        "current_teacher" : teacher.format2(),
+        "current_subject": subject.format(),
+        "current_school_year": school_year.format(),
+        "current_groups": forrmatted_current_groups,
+        "all_groups": forrmatted_groups,
+        "all_teachers": formatted_teachers,
+        "all_subjects": formatted_subjects,
+        "all_years": formatted_school_years
+    }) 
+
+# @manager.route('dashboard/exams/<int:exam_id>/live_exam', methods=["GET"])
+# def get_edit_examForm(exam_id):
+
+#     exam = Exam.query.get(int(exam_id))
+#     if exam == None:
+#         abort(404) 
+#     questions = exam.questions
+#     random_questions = [ random.choice()]
+       
 
 
 @manager.route('dashboard/exams/<int:exam_id>', methods=["PUT"])
@@ -224,14 +265,19 @@ def edit_exam(exam_id):
 
 
             for student in students:
-                
+
                 student.has_exam = True
                 student.exams_num += 1
 
                 current_exam.students.append(student)
 
     except (ValueError, KeyError, TypeError):
-        abort(404)       
+        
+        raise CustomError({
+           "message": "Bad Request",
+           "description": "Check the the posted data (key_names, values_types)"
+          }, 400)
+
     except:
         abort(500)
     else:
@@ -264,28 +310,68 @@ def get_exam_students(exam_id):
 
     current_exam = Exam.query.get(int(exam_id)) 
 
+    if current_exam == None:
+        abort(404)
+
     exam_students = current_exam.students
     exam_teacher = current_exam.exam_owner
     exam_school_year = current_exam.study_year
 
     all_students = exam_teacher.students
-    #if len(all_students) == 0:
-    
     students_need_activation = []
     for student in all_students:
         if student.school_year_id == exam_school_year.id and student not in exam_students:
             students_need_activation.append(student)
 
-    formatted_students = [student.format() for student in exam_students]
+    formatted_active_students = [student.format() for student in exam_students]
     not_active_students = [student1.format() for student1 in students_need_activation]
 
     return jsonify({
-        "activated__students":  formatted_students,
+        "activated__students":  formatted_active_students,
         "not_active_students": not_active_students
 
     })
 
+@manager.route('dashboard/exams/<int:exam_id>/students/<int:student_id>', methods=["PUT"])
+def active_student(exam_id, student_id):
 
+    current_exam = Exam.query.get(int(exam_id))
+    current_student = Student.query.get(int(student_id))
+    if current_exam == None or current_student == None:
+        abort(404)
+    current_student.exams.append(current_exam)
+    current_student.has_exam = True
+    current_student.exams_num += 1
+    current_student.update()
+    return jsonify({
+        "activated_student": {
+            "username": current_student.username,
+            "id": current_student.id
+        }
+    })
+
+@manager.route('dashboard/exams/<int:exam_id>/students/<int:student_id>', methods=["DELETE"])
+def deactive_student(exam_id, student_id):
+    current_student = Student.query.get(int(student_id)) 
+    exam_room_user = ExamRoom.query.filter_by(exam_id=exam_id, student_id=student_id).one_or_none()
+    if exam_room_user == None:
+        abort(404)
+
+    db.session.delete(exam_room_user)
+    db.session.commit()
+    if current_student.exams_num == 1:
+        current_student.exams_num = 0
+        current_student.has_exam = False
+    else:
+        current_student.exams_num -= 1 
+    current_student.update()    
+    return jsonify({
+        "deactivated_student": {
+            "username": current_student.username,
+            "id": current_student.id
+        }
+    })    
+    
 @manager.route('dashboard/exams/<int:exam_id>/all_questions')
 def get_exam_questions(exam_id):
     
@@ -308,7 +394,7 @@ def get_question_form(exam_id):
     subjects = Subject.query.all()
     school_years = SchoolYear.query.all()
     teachers = Teacher.query.all()
-    if len(subjects) or len(school_years) or len(teachers):
+    if len(subjects) == 0 or len(school_years) == 0 or len(teachers) == 0:
         abort(404)
 
     formatted_subjects = [subject.format() for subject in subjects]
@@ -395,7 +481,7 @@ def edit_question_form(exam_id, question_id):
     school_years = SchoolYear.query.all()
     teachers = Teacher.query.all()
     
-    if len(subjects) or len(school_years) or len(teachers) == 0:
+    if len(subjects) == 0 or len(school_years) == 0 or len(teachers) == 0:
         raise CustomError({
            "message": "Not Found",
            "description": "Oop! there are missing data check(teachers, school_years, subjects)"
@@ -492,10 +578,7 @@ def edit_question(exam_id, question_id):
     except:
         abort(500)
     else:
-
         current_question.update()    
-
-
         return jsonify({
             "updated_question": {
                 "text": current_question.question_head,
@@ -509,15 +592,13 @@ def delete_question(exam_id, question_id):
 
     current_question = Question.query.get(int(question_id))
     if current_question == None:
-
         raise CustomError({
            "message": "Not Found",
            "description": "Oop! this question is not exist"
           }, 404)
+
     try:
-
         question_data = current_question
-
         current_question.delete()
 
         return jsonify({
@@ -538,7 +619,6 @@ def get_teachers():
            "message": "Not Found",
            "description":  "You need to edit some teachers"
           }, 404)
-
 
     formatted_teachers = paginate_entities(request, teachers)
     
@@ -632,6 +712,11 @@ def create_groups(teacher_id):
                     }, 400)
             
             school_year_id = group.get('school_year_id')
+            if school_year_id == None or school_year_id == "":
+                raise CustomError({
+                    "message": "Bad Request",
+                    "description": "There is no group school_year_id attached"
+                    }, 400)
             school_year = SchoolYear.query.get(int(school_year_id))
             
             new_group = Group(title=name, group_owner=teacher, study_year=school_year)
@@ -673,27 +758,22 @@ def update_group_form(teacher_id):
                     }, 404)
 
     current_groups = current_teacher.groups
-    subjects = Subject.query.all()
-    if len(subjects) == 0 or len(current_groups) == 0:
-        raise CustomError({
-                    "message": "Not Found",
-                    "description":  "Oops! there are missing data (groups or subjects) "
-                    }, 404)
-
+    school_years = SchoolYear.query.all()
+    
     formatted_current_groups = [group.format2() for group in current_groups]
-    formatted_subjects = [subject.format() for subject in subjects]
+    formatted_school_years = [school_year.format() for school_year in school_years]
     
     
     return jsonify({
         "current_groups": formatted_current_groups,
-        "all_subjects": formatted_subjects
+        "all_years": formatted_school_years
     })
     
 @manager.route('dashboard/teachers/<teacher_id>/current_groups', methods=['PUT'])
 def update_group(teacher_id):
 
     data = request.get_json()
-    current_updated_groups = data.get('groups', None)
+    current_updated_groups = data.get('updated_groups', None)
     new_groups = data.get('new_groups', None)
 
     current_teacher = Teacher.query.get(int(teacher_id))
@@ -722,6 +802,7 @@ def update_group(teacher_id):
                     "message": "Bad Request",
                     "description": "There is no group name attached"
                     }, 400)
+
             school_year_id = group.get('school_year_id')
             school_year = SchoolYear.query.get(int(school_year_id))
             
@@ -729,8 +810,8 @@ def update_group(teacher_id):
             new_group.insert()
             created_groups.append(new_group)
 
-    formatted_updated_groups =  [grp.format() for grp in updated_groups]  
-    formatted_created_groups = [grp1.format() for grp1 in created_groups]
+    formatted_updated_groups =  [up_grp.format() for up_grp in updated_groups]  
+    formatted_created_groups = [cr_grp.format() for cr_grp in created_groups]
 
     return jsonify({
         "updated_groups" : formatted_updated_groups,
@@ -795,7 +876,11 @@ def update_teacher(teacher_id):
 @manager.route('dashboard/teachers/<teacher_id>', methods=['DELETE'])
 def delete_teacher(teacher_id):
     current_teacher = Teacher.query.get(int(teacher_id))
-
+    if current_teacher == None:
+         raise CustomError({
+                    "message": "Not Found",
+                    "description":  "Oops! this teacher Id not exist"
+                    }, 404)
     teacher_data = current_teacher.format2()
     current_teacher.delete()
 
@@ -806,6 +891,7 @@ def delete_teacher(teacher_id):
 
 @manager.route('dashboard/teachers/<teacher_id>/students')
 def get_teacher_students(teacher_id):
+
     current_teacher = Teacher.query.get(int(teacher_id))
     if current_teacher == None:
         raise CustomError({
@@ -814,6 +900,7 @@ def get_teacher_students(teacher_id):
                     }, 404)
 
     students = current_teacher.students
+
     formatted_students = [student.format() for student in students]
     return jsonify({
         "teacher_students": formatted_students
@@ -822,27 +909,43 @@ def get_teacher_students(teacher_id):
 @manager.route('dashboard/teachers/<teacher_id>/not_students')
 def get_not_students(teacher_id):
     current_teacher = Teacher.query.get(int(teacher_id))
+    if current_teacher == None:
+        raise CustomError({
+                    "message": "Not Found",
+                    "description":  "Oops! this teacher Id not exist"
+                    }, 404)
+
     teacher_students = current_teacher.students
     all_students = Student.query.all()
-    not_students = []
-    for anystudent in all_students:
-        if anystudent not in teacher_students:
-            not_students.append(anystudent)
 
+    if len(all_students) == 0:
+        raise CustomError({
+           "message": "Not Found",
+           "description": "you don't have any students on the DB"
+          }, 404)
+    try:
+        not_students = []
+        for anystudent in all_students:
+            if anystudent not in teacher_students:
+                not_students.append(anystudent)
+    except TypeError:
+        abort(500)
+       
+    if len(not_students) == 0 or not_students == None:
+        return "All the DB students have been added to this teacher"
         
-
     formatted_students = [student.format() for student in not_students]
     teacher_groups = current_teacher.groups
     school_years = SchoolYear.query.all()
 
-    formatted_groubs = [group.format2() for group in teacher_groups]
-    formatted_school_years = [school_year.format for school_year in school_years]
+    formatted_groups = [group.format2() for group in teacher_groups]
+    formatted_school_years = [school_year.format() for school_year in school_years]
     
     
     return jsonify({
         "not_teacher_students": formatted_students,
         "school_years": formatted_school_years,
-        "groubs" : formatted_groubs
+        "groups" : formatted_groups
     })    
 
 
@@ -850,6 +953,12 @@ def get_not_students(teacher_id):
 def remove_student(teacher_id, student_id):
     
     student = Student.query.get(int(student_id))
+    if student == None:
+        raise CustomError({
+                    "message": "Not Found",
+                    "description":  "Oops! this student Id not exist"
+                    }, 404)
+
     should_deleted = Center.query.filter_by(teacher_id=teacher_id, student_id=student_id).first()
     db.session.delete(should_deleted)
     db.session.commit()
@@ -867,12 +976,23 @@ def add_student(teacher_id, student_id):
     group_id = data.get('group_id')
 
     current_teacher = Teacher.query.get(int(teacher_id))
+
+    if current_teacher == None:
+        raise CustomError({
+           "message": "Not Found",
+           "description": "Oop! this teacher is not exist"
+          }, 404)
+
     student = Student.query.get(int(student_id))
+    if student == None:
+        raise CustomError({
+           "message": "Not Found",
+           "description": "Oop! this student is not exist"
+          }, 404)
+
     current_teacher.students.append(student)
     group = Group.query.get(int(group_id))
     group.students.append(student)
-
-
     
     return jsonify({
         "added_student": {
@@ -881,11 +1001,15 @@ def add_student(teacher_id, student_id):
         }
     })      
 
-
 @manager.route('dashboard/all_students')
 def get_all_students():
 
     students = Student.query.all()
+    if len(students) == 0:
+        return {
+            "Respond": "There is not any students on the DB, yet!"
+        }
+
     formatted_students = [student.format() for student in students]
 
     return jsonify({
@@ -904,11 +1028,13 @@ def get_form_data():
     school_years = SchoolYear.query.all()
     teachers = Teacher.query.all()
     groups = Group.query.all()
-    if len(groups) or len(school_years) or len(teachers) == 0:
+    
+    if len(groups) == 0 or len(school_years) == 0 or len(teachers) == 0:
         raise CustomError({
            "message": "Not Found",
            "description": "Oop! there are missing data check(teachers, school_years, groups)"
           }, 404) 
+
     formatted_school_years = [school_year.format() for school_year in school_years]
     formatted_teachers = [teacher.format() for teacher in teachers]
     forrmatted_groups = [group.format2() for group in groups]
@@ -922,38 +1048,55 @@ def get_form_data():
 
 @manager.route('dashboard/students', methods=["POST"])
 def post_student():
+    try:
 
-    data = request.get_json()
-    fname = data.get('fname')
-    lname = data.get('lname')
-    username = data.get('username')
-    password = data.get('password')
-    mobile = data.get('mobile')
-    school_year_id = data.get('school_year_id')
-    teacher_id = data.get('teacher_id')
-    group_id = data.get('group_id')
+        data = request.get_json()
+        fname = data['fname']
+        lname = data['lname']
+        username = data['username']
+        password = data['password']
+        mobile = data['mobile']
+        school_year_id = data['school_year_id']
+        teacher_id = data['teacher_id']
+        group_id = data['group_id']
 
-    group = Group.query.get(int(group_id))
-    teacher = Teacher.query.get(int(teacher_id))
-    school_year = SchoolYear.query.get(school_year_id)
+        group = Group.query.get(int(group_id))
+        teacher = Teacher.query.get(int(teacher_id))
+        school_year = SchoolYear.query.get(school_year_id)
 
-    new_student = Student(fname=fname, lname=lname, username=username, password=guard1.hash_password(password), mobile=mobile, study_year=school_year)
-    new_student.teachers.append(teacher)
-    new_student.groups.append(group)
-    new_student.insert()
+        new_student = Student(fname=fname, lname=lname, username=username, password=guard1.hash_password(password), mobile=mobile, study_year=school_year)
+        new_student.teachers.append(teacher)
+        new_student.groups.append(group)
 
-    return jsonify({
-        "created_student": {
-            'username': new_student.username,
-            "id": new_student.id
-        },
-        "all_students_num": len(Student.query.all())
-    })
+    except (ValueError, KeyError, TypeError):
+        raise CustomError({
+           "message": "Bad Request",
+           "description": "Check the the posted data (key_names, values_types)"
+          }, 400)
+    
+    except:
+        abort(500)
+    else:
+        new_student.insert()
+
+        return jsonify({
+            "created_student": {
+                'username': new_student.username,
+                "id": new_student.id
+            },
+            "all_students_num": len(Student.query.all())
+        })
 
 @manager.route('dashboard/students/<int:student_id>', methods=["GET"])
 def update_student_form(student_id):
 
     current_student = Student.query.get(int(student_id))
+    if current_student == None:
+        raise CustomError({
+           "message": "Not Found",
+           "description": "Oop! this scurrent_student is not exist"
+          }, 404)
+
     school_year = current_student.study_year
     school_years = SchoolYear.query.all()
     formatted_school_years = [year.format() for year in school_years]
@@ -968,51 +1111,63 @@ def update_student_form(student_id):
 
 @manager.route('dashboard/students/<int:student_id>', methods=["PUT"])
 def update_student(student_id):
+    try:
+        data = request.get_json()
+        fname = data.get('fname', None)
+        lname = data.get('lname', None)
+        username = data.get('username', None)
+        password = data.get('password', None)
+        mobile = data.get('mobile', None)
+        school_year_id = data.get('school_year_id', None)
 
-    data = request.get_json()
-    fname = data.get('fname', None)
-    lname = data.get('lname', None)
-    username = data.get('username', None)
-    password = data.get('password', None)
-    mobile = data.get('mobile', None)
-    school_year_id = data.get('school_year_id', None)
+        current_student = Student.query.get(int(student_id))
 
-    current_student = Student.query.get(int(student_id))
+        if fname != None:
+            current_student.fname = fname
 
-    if fname != None:
-        current_student.fname = fname
+        if lname != None:
+            current_student.lname = lname
 
-    if lname != None:
-        current_student.lname = lname
+        if username != None:
+            current_student.username = username    
+        
+        if password != None:
+            current_student.password = guard1.hash_password(password)  
 
-    if username != None:
-        current_student.username = username    
-    
-    if password != None:
-        current_student.password = guard1.hash_password(password)  
+        if mobile != None:
+            current_student.mobile = mobile 
 
-    if mobile != None:
-        current_student.mobile = mobile 
+        if school_year_id != None:
+            school_year = SchoolYear.query.get(int(school_year_id)) 
+            current_student.study_year = school_year
+    except (ValueError, KeyError, TypeError):
+            raise CustomError({
+            "message": "Bad Request",
+            "description": "Check the the posted data (key_names, values_types)"
+            }, 400)
+    except:
+        abort(500)   
+    else:
+        current_student.update()    
 
-    if school_year_id != None:
-        school_year = SchoolYear.query.get(int(school_year_id)) 
-        current_student.study_year = school_year
-
-    current_student.update()    
-
-    return jsonify({
-        "updated_student": {
-            "username": current_student.username,
-            "id": current_student.id
-        }
-    })
+        return jsonify({
+            "updated_student": {
+                "username": current_student.username,
+                "id": current_student.id
+            }
+        })
 
 @manager.route('dashboard/students/<int:student_id>', methods=["DELETE"])
 def delete_student(student_id):
 
     current_student = Student.query.get(int(student_id))
-    student_data = current_student
+    if current_student == None:
+        raise CustomError({
+                    "message": "Not Found",
+                    "description":  "Oops! this teacher Id not exist"
+                    }, 404)
 
+    student_data = current_student
     current_student.delete()
 
     return jsonify({
@@ -1038,13 +1193,13 @@ def server_er(e):
         "message": "internal server error",
         "error": 500}), 500  
 
-# @manager.errorhandler(CustomError)
-# def bad_request(e):
-#     return jsonify({
-#         "success": False,
-#         "message": e.error.get('message'),
-#         "description": e.error.get('description'),
-#         "status_code": e.status_code}), e.status_code
+@manager.errorhandler(CustomError)
+def bad_request(e):
+    return jsonify({
+        "success": False,
+        "message": e.error.get('message'),
+        "description": e.error.get('description'),
+        "status_code": e.status_code}), e.status_code
     
 
       
