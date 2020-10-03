@@ -9,7 +9,7 @@ from flask import redirect, url_for, request
 
 
 database_name = "osos$default"
-database_path = "postgres://{}:{}@{}/{}".format('osos', 'robot9000','osos.mysql.pythonanywhere-services.com', database_name)
+database_path = "mysql+mysqlconnector://{}:{}@{}/{}".format('osos', 'robot9000','osos.mysql.pythonanywhere-services.com', database_name)
 
 
 db = SQLAlchemy()
