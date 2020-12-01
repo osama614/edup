@@ -21,6 +21,7 @@ def create_app():
       send_default_pii=False
     )
     app.config['SECRET_KEY'] = 'asdfghjkl;fghjkl;'
+    app.config['JWT_ACCESS_LIFESPAN'] = {'days': 2}
     setup_db(app)
     setup_auth(app)
 

@@ -139,6 +139,7 @@ def create_exam():
             student.exams_num += 1
 
             new_exam.students.append(student)
+            
 
         
     except (ValueError, KeyError, TypeError):
@@ -152,7 +153,6 @@ def create_exam():
 
     else:
         new_exam.insert()
-        
         return jsonify({
             "exam_created":new_exam.title
 

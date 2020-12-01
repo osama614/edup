@@ -8,8 +8,8 @@ from flask import redirect, url_for, request
 
 
 
-database_name = "osos$default"
-database_path = "mysql+mysqlconnector://{}:{}@{}/{}".format('osos', 'robot9000','osos.mysql.pythonanywhere-services.com', database_name)
+database_name = "lms"
+database_path = "postgres://{}:{}@{}/{}".format('postgres', 'robot9000','localhost:5432', database_name)
 
 
 db = SQLAlchemy()
@@ -120,25 +120,34 @@ class CenterView(ViewMixin, ModelView):
 
 class Result(db.Model):
 
-      id = db.Column(db.Integer, primary_key=True)
-      exam_id = db.Column(db.Integer, db.ForeignKey('exam.id'))
-      title = db.Column(db.String(50))
-      start_date = db.Column(db.DateTime)
-      student_id = db.Column(db.Integer, db.ForeignKey('student.id'))
-      teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'))
-      total_grade = db.Column(db.Float)
+    id = db.Column(db.Integer, primary_key=True)
+    exam_id = db.Column(db.Integer, db.ForeignKey('exam.id'))
+    title = db.Column(db.String(50))
+    start_date = db.Column(db.DateTime)
+    student_id = db.Column(db.Integer, db.ForeignKey('student.id'))
+    teacher_id = db.Column(db.Integer, db.ForeignKey('teacher.id'))
+    total_grade = db.Column(db.Float)
+    student_grade = db.Column(db.Float)
 
 
-      def insert(self):
+    def insert(self):
         db.session.add(self)
         db.session.commit()
 
-      def format(self):
+    def update(self):
+        db.session.commit() 
+
+    def delete(self):
+        db.session.delete(self)
+        db.session.commit()
+        
+    def format(self):
 
         return {
             "id": self.id,
             "title": self.title,
             "start_date": self.start_date,
+            "student_grade": self.total_grade,
             "total_grade": self.total_grade
         }    
 
@@ -245,7 +254,15 @@ class Student(AuthMixin, db.Model):
             "has_exam": self.has_exam,
             "exams_num": self.exams_num,
             "teachers_num": self.teachers_num
-        }    
+        }   
+
+    def format2(self):
+        return {
+            "fname": self.fname,
+            "lname": self.lname,
+            "username": self.username,
+            "mobile": self.mobile
+        }  
 
 
 
@@ -365,6 +382,9 @@ class ExamRoom(db.Model):
     exam_id = db.Column(db.Integer, db.ForeignKey('exam.id'),primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('student.id'), primary_key=True)
     
+    def delete(self):
+        db.session.delete(self)
+        db.session.commit()
 
 class Exam(db.Model):
     
@@ -410,7 +430,13 @@ class Exam(db.Model):
         return  {
             "id": self.id,
             "title": self.title,
-        }       
+        }
+    def format3(self):
+        return  {
+            "id": self.id,
+            "title": self.title,
+            "teacher_id": self.teacher_id
+        }           
 
 
 group_exam = db.Table('group_exam',
